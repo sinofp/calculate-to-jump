@@ -2,6 +2,8 @@
 (local font (love.graphics.newFont :assets/PublicPixel.woff 30))
 (local screen-width (love.graphics.getWidth))
 (local screen-height (love.graphics.getHeight))
+(local right-icon (love.graphics.newImage :assets/checkmark.png))
+(local wrong-icon (love.graphics.newImage :assets/cross.png))
 
 (local lume (require :lib.lume))
 (local tick (require :lib.tick))
@@ -60,7 +62,14 @@
 ; }}}
 
 ; {{{ Calc
-(local Calc {:queue (Queue.new) :n 1 :delay/s 1 :start false})
+(local Calc {:queue (Queue.new)
+             :n 1
+             :delay/s 1
+             :start false
+             :reveal false
+             :reveal-time 0.5
+             :reveal-content "? ? ? = ?"
+             :correct true})
 
 (fn Calc.gen-rand-int [max]
   (-> max
@@ -84,21 +93,38 @@
   (tick.delay (fn []
                 (Calc.update-question)) (* i Calc.delay/s)))
 
+(tick.delay (fn []
+              (set Calc.start true)) (* Calc.n Calc.delay/s))
+
 (fn Calc.update [dt]
-  (when (not Calc.start)
-    (tick.update dt)))
+  (tick.update dt))
 
 (fn Calc.draw []
-  (love.graphics.print Calc.display))
+  (love.graphics.print Calc.display)
+  (let [prev-n (Calc.queue:front)]
+    (love.graphics.print (if Calc.reveal
+                             Calc.reveal-content
+                             "? ? ? = ?") 0 30))
+  (when Calc.reveal
+    (love.graphics.draw (if Calc.correct right-icon wrong-icon) 270 30)))
 
-(fn Calc.keypressed [key]
-  (let [ans (. (Calc.queue:front) :a)
-        num-string (key:gsub "%D" "")
-        num (tonumber num-string)]
-    (print (.. "Now the queue is " (fennel.view Calc.queue) " the ans is " num))
-    (when (= num ans)
-      (Calc.update-question)
-      (Calc.queue:pop))))
+(fn Calc.keypressed [key _ repeat]
+  (when (and Calc.start (not repeat))
+    (let [prev-n (Calc.queue:front)
+          num-string (key:gsub "%D" "")
+          num (tonumber num-string)]
+      (when (not= num nil)
+        (set Calc.correct (= num prev-n.a))
+        (set Calc.reveal-content (.. prev-n.q " = " num))
+        (when Calc.reveal
+          (Calc.reveal-clearer:stop))
+        (set Calc.reveal true)
+        (set Calc.reveal-clearer
+             (tick.delay (fn []
+                           (set Calc.reveal false))
+                         Calc.reveal-time))
+        (Calc.update-question)
+        (Calc.queue:pop)))))
 
 ; }}}
 
@@ -115,8 +141,8 @@
   (state.draw))
 
 (fn love.keypressed [key]
-  (when (= key :escape)
-    (love.event.quit))
+  (if (= key :escape) (love.event.quit)
+      (= key :r) (love.event.quit :restart))
   (state.keypressed key))
 
 ; }}}
