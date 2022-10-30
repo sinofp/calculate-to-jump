@@ -2,12 +2,16 @@
 (local font (love.graphics.newFont :assets/PublicPixel.woff 30))
 (local screen-width (love.graphics.getWidth))
 (local screen-height (love.graphics.getHeight))
-(local right-icon (love.graphics.newImage :assets/checkmark.png))
-(local wrong-icon (love.graphics.newImage :assets/cross.png))
+(local right-icon (love.graphics.newImage :assets/tick_256.png))
+(local wrong-icon (love.graphics.newImage :assets/cross_256.png))
+(local tile-map
+       (love.graphics.newImage :assets/monochrome_tilemap_transparent.png))
 
 (local lume (require :lib.lume))
 (local tick (require :lib.tick))
 (local fun (require :lib.fun))
+(local anim8 (require :lib.anim8))
+(local bump (require :lib.bump))
 
 (math.randomseed (os.time))
 ; }}}
@@ -106,7 +110,8 @@
                              Calc.reveal-content
                              "? ? ? = ?") 0 30))
   (when Calc.reveal
-    (love.graphics.draw (if Calc.correct right-icon wrong-icon) 270 30)))
+    (love.graphics.draw (if Calc.correct right-icon wrong-icon) 270 30 0 0.125
+                        0.125)))
 
 (fn Calc.keypressed [key _ repeat]
   (when (and Calc.start (not repeat))
@@ -128,8 +133,68 @@
 
 ; }}}
 
+; {{{ Character
+(local Char {:x 100
+             :y 200
+             :v {:x 0 :y 0 :x-lim 500}
+             :accel 1000
+             :brake 1500
+             :width (* 16 4)
+             :height (* 16 4)
+             :ani {}
+             :in-air false
+             :on-ground true})
+
+(local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
+
+(set Char.ani.idle (anim8.newAnimation (g 1 14 6 14) [0.4 0.2]))
+(set Char.ani.now Char.ani.idle)
+(set Char.ani.walk-right (anim8.newAnimation (g :2-4 14) 0.1))
+(set Char.ani.walk-left (: (Char.ani.walk-right:clone) :flipH))
+(set Char.ani.jump-right (anim8.newAnimation (g 5 14) 0.1))
+(set Char.ani.jump-left (: (Char.ani.jump-right:clone) :flipH))
+
+(fn Char.update-velosity [dt]
+  (if (love.keyboard.isDown :right)
+      (set Char.v.x
+           (math.min Char.v.x-lim
+                     (+ Char.v.x
+                        (* dt (if (< 0 Char.v.x) Char.accel Char.brake)))))
+      (love.keyboard.isDown :left)
+      (set Char.v.x
+           (math.max (- Char.v.x-lim)
+                     (- Char.v.x
+                        (* dt (if (< 0 Char.v.x) Char.brake Char.accel)))))
+      (let [v-brake (* dt Char.brake (if (< Char.v.x 0) 1 -1))]
+        (set Char.v.x (if (< (math.abs Char.v.x) (math.abs v-brake)) 0
+                          (+ Char.v.x v-brake))))))
+
+(fn Char.update-ani []
+  (set Char.ani.now (if (= 0 Char.v.x) Char.ani.idle
+                        (< 0 Char.v.x) Char.ani.walk-right
+                        Char.ani.walk-left)))
+
+(fn Char.move [dt]
+  (let [goal-x (+ Char.x (* Char.v.x dt))
+        goal-y (+ Char.y (* Char.v.y dt))]
+    (set Char.x goal-x)
+    (set Char.y goal-y)))
+
+(fn Char.update [dt]
+  (Char.ani.now:update dt)
+  (Char.update-velosity dt)
+  (Char.update-ani)
+  (Char.move dt))
+
+(fn Char.draw []
+  (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
+
+(fn Char.keypressed [key _ repeat])
+
+; }}}
+
 ; {{{ Love
-(var state Calc)
+(var state Char)
 
 (fn love.load []
   (love.graphics.setFont font))
