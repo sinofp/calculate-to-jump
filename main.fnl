@@ -135,15 +135,16 @@
 
 ; {{{ Character
 (local Char {:x 100
-             :y 200
-             :v {:x 0 :y 0 :x-lim 500}
+             :y 300
+             :v {:x 0 :y 0 :x-lim 500 :jump -300}
              :accel 1000
              :brake 1500
+             :gravity 1000
              :width (* 16 4)
              :height (* 16 4)
              :ani {}
-             :in-air false
-             :on-ground true})
+             :on-ground true
+             :can-long-jump true})
 
 (local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
 
@@ -154,33 +155,49 @@
 (set Char.ani.jump-right (anim8.newAnimation (g 5 14) 0.1))
 (set Char.ani.jump-left (: (Char.ani.jump-right:clone) :flipH))
 
+(fn Char.facing-left []
+  (< Char.v.x 0))
+
 (fn Char.update-velosity [dt]
   (if (love.keyboard.isDown :right)
-      (set Char.v.x
-           (math.min Char.v.x-lim
-                     (+ Char.v.x
-                        (* dt (if (< 0 Char.v.x) Char.accel Char.brake)))))
+      (set Char.v.x (math.min Char.v.x-lim
+                              (+ Char.v.x
+                                 (* dt
+                                    (if (Char.facing-left) Char.brake
+                                        Char.accel)))))
       (love.keyboard.isDown :left)
-      (set Char.v.x
-           (math.max (- Char.v.x-lim)
-                     (- Char.v.x
-                        (* dt (if (< 0 Char.v.x) Char.brake Char.accel)))))
+      (set Char.v.x (math.max (- Char.v.x-lim)
+                              (- Char.v.x
+                                 (* dt
+                                    (if (Char.facing-left) Char.accel
+                                        Char.brake)))))
       (let [v-brake (* dt Char.brake (if (< Char.v.x 0) 1 -1))]
         (set Char.v.x (if (< (math.abs Char.v.x) (math.abs v-brake)) 0
-                          (+ Char.v.x v-brake))))))
+                          (+ Char.v.x v-brake)))))
+  (when (and Char.can-long-jump (love.keyboard.isDown :up))
+    (set Char.v.y Char.v.jump))
+  (set Char.v.y (+ Char.v.y (* dt Char.gravity))))
 
+; TODO Fix jumping from right but when = 0 Char.v.x
 (fn Char.update-ani []
-  (set Char.ani.now (if (= 0 Char.v.x) Char.ani.idle
-                        (< 0 Char.v.x) Char.ani.walk-right
-                        Char.ani.walk-left)))
+  (set Char.ani.now (if Char.on-ground
+                        (if (= 0 Char.v.x) Char.ani.idle
+                            (Char.facing-left) Char.ani.walk-left
+                            Char.ani.walk-right)
+                        (if (Char.facing-left) Char.ani.jump-left
+                            Char.ani.jump-right))))
 
 (fn Char.move [dt]
   (let [goal-x (+ Char.x (* Char.v.x dt))
-        goal-y (+ Char.y (* Char.v.y dt))]
+        goal-y (+ Char.y (* Char.v.y dt))
+        ground-y (- screen-height Char.height)
+        real-y (math.min ground-y goal-y)]
+    (set Char.on-ground (= real-y ground-y))
     (set Char.x goal-x)
-    (set Char.y goal-y)))
+    (set Char.y real-y)))
 
 (fn Char.update [dt]
+  (tick.update dt)
   (Char.ani.now:update dt)
   (Char.update-velosity dt)
   (Char.update-ani)
@@ -189,7 +206,14 @@
 (fn Char.draw []
   (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
 
-(fn Char.keypressed [key _ repeat])
+; TODO nearly on ground
+(fn Char.keypressed [key]
+  (when (and Char.on-ground (= key :up))
+    (set Char.v.y Char.v.jump)
+    (set Char.on-ground false)
+    (set Char.can-long-jump true)
+    (tick.delay (fn []
+                  (set Char.can-long-jump false)) 0.3)))
 
 ; }}}
 
