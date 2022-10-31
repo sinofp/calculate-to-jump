@@ -13,6 +13,18 @@
 (local anim8 (require :lib.anim8))
 (local bump (require :lib.bump))
 
+(local world (bump.newWorld))
+(local map [[1 0 0 0 0 0 0 0 0 1]
+            [1 0 0 0 0 0 0 0 0 1]
+            [1 0 0 0 0 1 1 0 0 1]
+            [1 0 0 1 0 0 0 1 0 1]
+            [1 0 0 0 0 0 0 0 0 1]
+            [1 0 0 0 1 1 0 0 1 1]
+            [1 0 0 0 0 0 0 0 0 1]
+            [1 0 0 0 0 0 1 1 1 1]
+            [1 0 0 0 0 0 0 0 0 1]
+            [1 1 1 1 1 1 1 1 1 1]])
+
 (math.randomseed (os.time))
 ; }}}
 
@@ -139,7 +151,7 @@
              :v {:x 0 :y 0 :x-lim 500 :jump -300}
              :accel 1000
              :brake 1500
-             :gravity 1000
+             :gravity 2000
              :width (* 16 4)
              :height (* 16 4)
              :ani {}
@@ -148,12 +160,23 @@
 
 (local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
 
+(local box-ani (anim8.newAnimation (g 6 6) 1))
+
 (set Char.ani.idle (anim8.newAnimation (g 1 14 6 14) [0.4 0.2]))
 (set Char.ani.now Char.ani.idle)
 (set Char.ani.walk-right (anim8.newAnimation (g :2-4 14) 0.1))
 (set Char.ani.walk-left (: (Char.ani.walk-right:clone) :flipH))
 (set Char.ani.jump-right (anim8.newAnimation (g 5 14) 0.1))
 (set Char.ani.jump-left (: (Char.ani.jump-right:clone) :flipH))
+
+(world:add Char Char.x Char.y Char.width Char.height)
+
+(each [i row (ipairs map)]
+  (each [j tpe (ipairs row)]
+    (when (= 1 tpe)
+      (let [x (* 64 (- j 1))
+            y (* 64 (- i 1))]
+        (world:add {:name (.. "row " i " col " j)} x y 64 64)))))
 
 (fn Char.facing-left []
   (< Char.v.x 0))
@@ -176,7 +199,7 @@
                           (+ Char.v.x v-brake)))))
   (when (and Char.can-long-jump (love.keyboard.isDown :up))
     (set Char.v.y Char.v.jump))
-  (set Char.v.y (+ Char.v.y (* dt Char.gravity))))
+  (set Char.v.y (if Char.on-ground 1 (+ Char.v.y (* dt Char.gravity)))))
 
 ; TODO Fix jumping from right but when = 0 Char.v.x
 (fn Char.update-ani []
@@ -190,11 +213,14 @@
 (fn Char.move [dt]
   (let [goal-x (+ Char.x (* Char.v.x dt))
         goal-y (+ Char.y (* Char.v.y dt))
-        ground-y (- screen-height Char.height)
-        real-y (math.min ground-y goal-y)]
-    (set Char.on-ground (= real-y ground-y))
-    (set Char.x goal-x)
-    (set Char.y real-y)))
+        (actual-x actual-y cols len) (world:move Char goal-x goal-y)]
+    (set Char.x actual-x)
+    (set Char.y actual-y)
+    (set Char.on-ground false)
+    (for [i 1 len]
+      (when (< (. cols i :normal :y) 0)
+        (print (.. "Collide with " (. cols i :other :name)))
+        (set Char.on-ground true)))))
 
 (fn Char.update [dt]
   (tick.update dt)
@@ -204,7 +230,14 @@
   (Char.move dt))
 
 (fn Char.draw []
-  (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
+  (print (.. "Vx " Char.v.x " Vy " Char.v.y))
+  (Char.ani.now:draw tile-map Char.x Char.y 0 4 4)
+  (each [i row (ipairs map)]
+    (each [j tpe (ipairs row)]
+      (when (= 1 tpe)
+        (let [x (* 64 (- j 1))
+              y (* 64 (- i 1))]
+          (box-ani:draw tile-map x y 0 4 4))))))
 
 ; TODO nearly on ground
 (fn Char.keypressed [key]
@@ -213,7 +246,7 @@
     (set Char.on-ground false)
     (set Char.can-long-jump true)
     (tick.delay (fn []
-                  (set Char.can-long-jump false)) 0.3)))
+                  (set Char.can-long-jump false)) 0.5)))
 
 ; }}}
 
