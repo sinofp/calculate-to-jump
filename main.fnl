@@ -19,13 +19,20 @@
             [1 0 0 0 0 1 1 0 0 1]
             [1 0 0 1 0 0 0 1 0 1]
             [1 0 0 0 0 0 0 0 0 1]
-            [1 0 0 0 1 1 0 0 1 1]
+            [1 0 0 0 0 0 0 0 1 1]
             [1 0 0 0 0 0 0 0 0 1]
             [1 0 0 0 0 0 1 1 1 1]
-            [1 0 0 0 0 0 0 0 0 1]
+            [0 0 0 0 0 0 0 0 0 0]
             [1 1 1 1 1 1 1 1 1 1]])
 
 (math.randomseed (os.time))
+
+(macro += [a inc]
+  `(set ,a (+ ,a ,inc)))
+
+(fn axpy [y a x]
+  (+ (* a x) y))
+
 ; }}}
 
 ; {{{ Intro
@@ -58,7 +65,7 @@
   (setmetatable {:first 1 :last 0} {:__index Queue}))
 
 (fn Queue.push [self value]
-  (set self.last (+ 1 self.last))
+  (+= self.last 1)
   (tset self self.last value))
 
 (fn Queue.empty [self]
@@ -73,7 +80,7 @@
   (when (self:empty)
     (error "Queue is empty"))
   (tset self self.first nil)
-  (set self.first (+ 1 self.first)))
+  (+= self.first 1))
 
 ; }}}
 
@@ -116,11 +123,12 @@
   (tick.update dt))
 
 (fn Calc.draw []
-  (love.graphics.print Calc.display)
+  (love.graphics.print Calc.display (* 64 11) (* 64 3))
   (let [prev-n (Calc.queue:front)]
     (love.graphics.print (if Calc.reveal
                              Calc.reveal-content
-                             "? ? ? = ?") 0 30))
+                             "? ? ? = ?") (* 64 11)
+                         (* 64 4)))
   (when Calc.reveal
     (love.graphics.draw (if Calc.correct right-icon wrong-icon) 270 30 0 0.125
                         0.125)))
@@ -150,13 +158,13 @@
              :y 300
              :v {:x 0 :y 0 :x-lim 500 :jump -300}
              :accel 1000
-             :brake 1500
+             :decel 1800
              :gravity 2000
+             :jump {:coyote 0 :passed 0 :coyote-lim 0.25 :passed-lim 0.5}
              :width (* 16 4)
              :height (* 16 4)
              :ani {}
-             :on-ground true
-             :can-long-jump true})
+             :on-ground true})
 
 (local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
 
@@ -181,33 +189,36 @@
 (fn Char.facing-left []
   (< Char.v.x 0))
 
-(fn Char.update-velosity [dt]
+(fn Char.update-vx [dt]
   (if (love.keyboard.isDown :right)
-      (set Char.v.x (math.min Char.v.x-lim
-                              (+ Char.v.x
-                                 (* dt
-                                    (if (Char.facing-left) Char.brake
-                                        Char.accel)))))
+      (let [acc (if (Char.facing-left) Char.decel Char.accel)
+            vx (axpy Char.v.x dt acc)
+            vx-capped (math.min Char.v.x-lim vx)]
+        (set Char.v.x vx-capped))
       (love.keyboard.isDown :left)
-      (set Char.v.x (math.max (- Char.v.x-lim)
-                              (- Char.v.x
-                                 (* dt
-                                    (if (Char.facing-left) Char.accel
-                                        Char.brake)))))
-      (let [v-brake (* dt Char.brake (if (< Char.v.x 0) 1 -1))]
-        (set Char.v.x (if (< (math.abs Char.v.x) (math.abs v-brake)) 0
-                          (+ Char.v.x v-brake)))))
-  (when (and Char.can-long-jump (love.keyboard.isDown :up))
-    (set Char.v.y Char.v.jump))
-  (set Char.v.y (if Char.on-ground 1 (+ Char.v.y (* dt Char.gravity)))))
+      (let [acc (if (Char.facing-left) Char.accel Char.decel)
+            vx (axpy Char.v.x (- dt) acc)
+            vx-capped (math.max (- Char.v.x-lim) vx)]
+        (set Char.v.x vx-capped))
+      (let [v-decel (* dt Char.decel (if (Char.facing-left) 1 -1))
+            stop (< (math.abs Char.v.x) (math.abs v-decel))]
+        (if stop (set Char.v.x 0) (+= Char.v.x v-decel)))))
 
-; TODO Fix jumping from right but when = 0 Char.v.x
+(fn Char.update-vy [dt]
+  (when (and (< Char.jump.passed Char.jump.passed-lim)
+             (love.keyboard.isDown :up))
+    (set Char.v.y Char.v.jump))
+  (+= Char.v.y (* dt Char.gravity)))
+
 (fn Char.update-ani []
+  (set Char.ani.past-jump
+       (if (= Char.ani.idle Char.ani.now) Char.ani.jump-right Char.ani.now))
   (set Char.ani.now (if Char.on-ground
                         (if (= 0 Char.v.x) Char.ani.idle
                             (Char.facing-left) Char.ani.walk-left
                             Char.ani.walk-right)
-                        (if (Char.facing-left) Char.ani.jump-left
+                        (if (= 0 Char.v.x) Char.ani.past-jump
+                            (Char.facing-left) Char.ani.jump-left
                             Char.ani.jump-right))))
 
 (fn Char.move [dt]
@@ -218,19 +229,24 @@
     (set Char.y actual-y)
     (set Char.on-ground false)
     (for [i 1 len]
-      (when (< (. cols i :normal :y) 0)
-        (print (.. "Collide with " (. cols i :other :name)))
-        (set Char.on-ground true)))))
+      (let [normal (. cols i :normal)]
+        (when (= 1 (math.abs normal.x))
+          (set Char.v.x 0))
+        (when (< normal.y 0)
+          (set Char.jump.coyote 0)
+          (set Char.v.y 0)
+          (set Char.on-ground true))))))
 
 (fn Char.update [dt]
-  (tick.update dt)
+  (+= Char.jump.coyote dt)
+  (+= Char.jump.passed dt)
   (Char.ani.now:update dt)
-  (Char.update-velosity dt)
+  (Char.update-vx dt)
+  (Char.update-vy dt)
   (Char.update-ani)
   (Char.move dt))
 
 (fn Char.draw []
-  (print (.. "Vx " Char.v.x " Vy " Char.v.y))
   (Char.ani.now:draw tile-map Char.x Char.y 0 4 4)
   (each [i row (ipairs map)]
     (each [j tpe (ipairs row)]
@@ -239,14 +255,11 @@
               y (* 64 (- i 1))]
           (box-ani:draw tile-map x y 0 4 4))))))
 
-; TODO nearly on ground
 (fn Char.keypressed [key]
-  (when (and Char.on-ground (= key :up))
+  (when (and (< Char.jump.coyote Char.jump.coyote-lim) (= key :up))
     (set Char.v.y Char.v.jump)
     (set Char.on-ground false)
-    (set Char.can-long-jump true)
-    (tick.delay (fn []
-                  (set Char.can-long-jump false)) 0.5)))
+    (set Char.jump.passed 0)))
 
 ; }}}
 
