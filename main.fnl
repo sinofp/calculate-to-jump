@@ -145,18 +145,18 @@
   (tick.update dt))
 
 (fn Calc.draw []
-  (love.graphics.print Calc.display (* 64 11) (* 64 3))
+  (love.graphics.print Calc.display (* 64 11) (* 64 5))
   (let [prev-n (Calc.queue:front)]
     (love.graphics.print (if Calc.reveal
                              Calc.reveal-content
                              "? ? ? = ?") (* 64 11)
-                         (* 64 4)))
+                         (* 64 6)))
   (when Calc.reveal
-    (love.graphics.draw (if Calc.correct right-icon wrong-icon) 270 30 0 0.125
-                        0.125)))
+    (love.graphics.draw (if Calc.correct right-icon wrong-icon) (* 64 11)
+                        (* 64 7))))
 
-(fn Calc.keypressed [key _ repeat]
-  (when (and Calc.start (not repeat))
+(fn Calc.keypressed [key]
+  (when Calc.start
     (let [prev-n (Calc.queue:front)
           num-string (key:gsub "%D" "")
           num (tonumber num-string)]
@@ -176,8 +176,8 @@
 ; }}}
 
 ; {{{ Character
-(local Char {:x 64
-             :y 500
+(local Char {:x (* 64 3)
+             :y (* 64 5)
              :v {:x 0 :y 0 :x-lim 500 :jump -300}
              :accel 1000
              :decel 1800
@@ -277,7 +277,7 @@
               :batch (love.graphics.newSpriteBatch tile-map)
               :indices {}
               :offset 0
-              :down {:fire false :dis (* 6 1) :interval 0.5}})
+              :down {:fire false :dis (* 6 1) :interval 1}})
 
 (for [i 1 4]
   (let [frame (. Block.ani.frames i)
@@ -296,7 +296,7 @@
         (world:add id x y 64 (* 4 6))))))
 
 (world:add {:id :left-border} 0 0 1 screen-height)
-(world:add {:id :right-border} screen-width 0 1 screen-height)
+(world:add {:id :right-border} 640 0 1 screen-height)
 
 (tick.delay (fn []
               (set Block.down.fire true)) Block.down.interval)
@@ -322,26 +322,30 @@
             (Block.batch:add (. Block.tiles block) x y-down 0 4 4)
             (world:update id x y-down)))))))
 
+(fn Block.draw []
+  (love.graphics.draw Block.batch)
+  (love.graphics.rectangle :fill 638 0 4 screen-height))
+
 ; }}}
 
 ; {{{ Love
-(var state Char)
-
 (fn love.load []
   (love.graphics.setFont font))
 
 (fn love.update [dt]
   (Block.update dt)
+  (Calc.update dt)
   (Char.update dt))
 
 (fn love.draw []
-  (love.graphics.draw Block.batch)
-  (love.graphics.rectangle :fill 639 0 4 660)
-  (state.draw))
+  (Block.draw)
+  (Calc.draw)
+  (Char.draw))
 
 (fn love.keypressed [key]
   (if (= key :escape) (love.event.quit)
       (= key :r) (love.event.quit :restart))
-  (state.keypressed key))
+  (Calc.keypressed key)
+  (Char.keypressed key))
 
 ; }}}
