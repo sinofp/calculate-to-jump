@@ -106,11 +106,19 @@
 
 ; }}}
 
+; {{{ Status
+
+(local Status {:jumps 3 :score 0 :start false})
+
+(fn Status.draw []
+  (love.graphics.print (.. "Jumps: " Status.jumps) (* 64 11) (* 64 1)))
+
+; }}}
+
 ; {{{ Calc
 (local Calc {:queue (Queue.new)
              :n 1
              :delay/s 1
-             :start false
              :reveal false
              :reveal-time 0.5
              :reveal-content "? ? ? = ?"
@@ -139,10 +147,7 @@
                 (Calc.update-question)) (* i Calc.delay/s)))
 
 (tick.delay (fn []
-              (set Calc.start true)) (* Calc.n Calc.delay/s))
-
-(fn Calc.update [dt]
-  (tick.update dt))
+              (set Status.start true)) (* Calc.n Calc.delay/s))
 
 (fn Calc.draw []
   (love.graphics.print Calc.display (* 64 11) (* 64 5))
@@ -156,12 +161,13 @@
                         (* 64 7))))
 
 (fn Calc.keypressed [key]
-  (when Calc.start
+  (when Status.start
     (let [prev-n (Calc.queue:front)
           num-string (key:gsub "%D" "")
           num (tonumber num-string)]
       (when (not= num nil)
         (set Calc.correct (= num prev-n.a))
+        (+= Status.jumps (if Calc.correct 1 -1))
         (set Calc.reveal-content (.. prev-n.q " = " num))
         (when Calc.reveal
           (Calc.reveal-clearer:stop))
@@ -264,7 +270,9 @@
   (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
 
 (fn Char.keypressed [key]
-  (when (and (< Char.jump.coyote Char.jump.coyote-lim) (= key :up))
+  (when (and (< 0 Status.jumps) (< Char.jump.coyote Char.jump.coyote-lim)
+             (= key :up))
+    (+= Status.jumps -1)
     (set Char.v.y Char.v.jump)
     (set Char.on-ground false)
     (set Char.jump.passed 0)))
@@ -277,7 +285,7 @@
               :batch (love.graphics.newSpriteBatch tile-map)
               :indices {}
               :offset 0
-              :down {:fire false :dis (* 6 1) :interval 1}})
+              :down {:fire true :dis (* 6 1) :interval 1}})
 
 (for [i 1 4]
   (let [frame (. Block.ani.frames i)
@@ -302,8 +310,7 @@
               (set Block.down.fire true)) Block.down.interval)
 
 (fn Block.update [dt]
-  (tick.update dt)
-  (when Block.down.fire
+  (when (and Status.start Block.down.fire)
     (set Block.down.fire false)
     (tick.delay (fn []
                   (set Block.down.fire true))
@@ -333,11 +340,12 @@
   (love.graphics.setFont font))
 
 (fn love.update [dt]
+  (tick.update dt)
   (Block.update dt)
-  (Calc.update dt)
   (Char.update dt))
 
 (fn love.draw []
+  (Status.draw)
   (Block.draw)
   (Calc.draw)
   (Char.draw))
