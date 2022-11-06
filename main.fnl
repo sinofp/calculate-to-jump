@@ -108,7 +108,19 @@
 
 ; {{{ Status
 
-(local Status {:jumps 3 :score 0 :start false})
+(local Status {:jumps 3
+               :score 0
+               :start false
+               :end false
+               :start-time 0
+               :end-time 0})
+
+(fn Status.update []
+  (when (and Status.end (= 0 Status.end-time))
+    (set Status.end-time (love.timer.getTime))
+    (let [duration (- Status.end-time Status.start-time)
+          score (lume.round duration)]
+      (set Status.score score))))
 
 (fn Status.draw []
   (love.graphics.print (.. "Jumps: " Status.jumps) (* 64 11) (* 64 1)))
@@ -147,7 +159,9 @@
                 (Calc.update-question)) (* i Calc.delay/s)))
 
 (tick.delay (fn []
-              (set Status.start true)) (* Calc.n Calc.delay/s))
+              (set Status.start true)
+              (set Status.start-time (love.timer.getTime)))
+            (* Calc.n Calc.delay/s))
 
 (fn Calc.draw []
   (love.graphics.print Calc.display (* 64 11) (* 64 5))
@@ -242,6 +256,8 @@
   (let [goal-x (+ Char.x (* Char.v.x dt))
         goal-y (+ Char.y (* Char.v.y dt))
         (actual-x actual-y cols len) (world:move Char goal-x goal-y)]
+    (when (< screen-height actual-y)
+      (set Status.end true))
     (set Char.x actual-x)
     (set Char.y actual-y)
     (set Char.on-ground false)
@@ -340,15 +356,22 @@
   (love.graphics.setFont font))
 
 (fn love.update [dt]
+  (Status.update)
   (tick.update dt)
   (Block.update dt)
   (Char.update dt))
 
 (fn love.draw []
-  (Status.draw)
-  (Block.draw)
-  (Calc.draw)
-  (Char.draw))
+  (if Status.end
+      (love.graphics.printf (.. :Congratulation! "\n\n\n" "Your score is: "
+                                Status.score "!" "\n\n\n"
+                                "Press R to restart, or ESC to quit!")
+                            (* 64 2) (* 64 3) (- screen-width (* 64 4)))
+      (do
+        (Status.draw)
+        (Block.draw)
+        (Calc.draw)
+        (Char.draw))))
 
 (fn love.keypressed [key]
   (if (= key :escape) (love.event.quit)
