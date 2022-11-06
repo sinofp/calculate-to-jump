@@ -1,4 +1,10 @@
 ; {{{ Global
+(local lume (require :lib.lume))
+(local tick (require :lib.tick))
+(local fun (require :lib.fun))
+(local anim8 (require :lib.anim8))
+(local bump (require :lib.bump))
+
 (local font (love.graphics.newFont :assets/PublicPixel.woff 30))
 (local screen-width (love.graphics.getWidth))
 (local screen-height (love.graphics.getHeight))
@@ -7,23 +13,39 @@
 (local tile-map
        (love.graphics.newImage :assets/monochrome_tilemap_transparent.png))
 
-(local lume (require :lib.lume))
-(local tick (require :lib.tick))
-(local fun (require :lib.fun))
-(local anim8 (require :lib.anim8))
-(local bump (require :lib.bump))
+(local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
 
 (local world (bump.newWorld))
-(local map [[1 0 0 0 0 0 0 0 0 1]
-            [1 0 0 0 0 0 0 0 0 1]
-            [1 0 0 0 0 1 1 0 0 1]
-            [1 0 0 1 0 0 0 1 0 1]
-            [1 0 0 0 0 0 0 0 0 1]
-            [1 0 0 0 0 0 0 0 1 1]
-            [1 0 0 0 0 0 0 0 0 1]
-            [1 0 0 0 0 0 1 1 1 1]
+(local map [[0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 1 3]
+            [0 0 4 0 0 0 0 0 0 0]
             [0 0 0 0 0 0 0 0 0 0]
-            [1 1 1 1 1 1 1 1 1 1]])
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 1 2 3 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [1 3 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 4]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 1 3 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 4 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 1 3 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [1 2 3 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]
+            [0 0 0 0 0 0 0 0 0 0]])
 
 (math.randomseed (os.time))
 
@@ -154,8 +176,8 @@
 ; }}}
 
 ; {{{ Character
-(local Char {:x 100
-             :y 300
+(local Char {:x 64
+             :y 500
              :v {:x 0 :y 0 :x-lim 500 :jump -300}
              :accel 1000
              :decel 1800
@@ -166,10 +188,6 @@
              :ani {}
              :on-ground true})
 
-(local g (anim8.newGrid 16 16 (tile-map:getWidth) (tile-map:getHeight) -1 -1 1))
-
-(local box-ani (anim8.newAnimation (g 6 6) 1))
-
 (set Char.ani.idle (anim8.newAnimation (g 1 14 6 14) [0.4 0.2]))
 (set Char.ani.now Char.ani.idle)
 (set Char.ani.walk-right (anim8.newAnimation (g :2-4 14) 0.1))
@@ -178,13 +196,6 @@
 (set Char.ani.jump-left (: (Char.ani.jump-right:clone) :flipH))
 
 (world:add Char Char.x Char.y Char.width Char.height)
-
-(each [i row (ipairs map)]
-  (each [j tpe (ipairs row)]
-    (when (= 1 tpe)
-      (let [x (* 64 (- j 1))
-            y (* 64 (- i 1))]
-        (world:add {:name (.. "row " i " col " j)} x y 64 64)))))
 
 (fn Char.facing-left []
   (< Char.v.x 0))
@@ -230,8 +241,11 @@
     (set Char.on-ground false)
     (for [i 1 len]
       (let [normal (. cols i :normal)]
-        (when (= 1 (math.abs normal.x))
+        (when (not= 0 normal.x)
           (set Char.v.x 0))
+        (when (< 0 normal.y)
+          (set Char.v.y 0)
+          (set Char.jump.coyote Char.jump.coyote-lim))
         (when (< normal.y 0)
           (set Char.jump.coyote 0)
           (set Char.v.y 0)
@@ -247,19 +261,66 @@
   (Char.move dt))
 
 (fn Char.draw []
-  (Char.ani.now:draw tile-map Char.x Char.y 0 4 4)
-  (each [i row (ipairs map)]
-    (each [j tpe (ipairs row)]
-      (when (= 1 tpe)
-        (let [x (* 64 (- j 1))
-              y (* 64 (- i 1))]
-          (box-ani:draw tile-map x y 0 4 4))))))
+  (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
 
 (fn Char.keypressed [key]
   (when (and (< Char.jump.coyote Char.jump.coyote-lim) (= key :up))
     (set Char.v.y Char.v.jump)
     (set Char.on-ground false)
     (set Char.jump.passed 0)))
+
+; }}}
+
+; {{{ Blocks
+(local Block {:ani (anim8.newAnimation (g :11-14 10) 1)
+              :tiles []
+              :batch (love.graphics.newSpriteBatch tile-map)
+              :indices {}
+              :offset 0
+              :down {:fire false :dis (* 6 1) :interval 0.5}})
+
+(for [i 1 4]
+  (let [frame (. Block.ani.frames i)
+        (x y w h) (frame:getViewport)]
+    (frame:setViewport x y w 6)
+    (tset Block.tiles i frame)))
+
+(each [i row (ipairs map)]
+  (each [j block (ipairs row)]
+    (when (not= 0 block)
+      (let [x (* 16 4 (- j 1))
+            y (* 6 4 (- i 1))
+            id (.. i "-" j)]
+        (Block.batch:add (. Block.tiles block) x y 0 4 4)
+        (tset Block.indices id id)
+        (world:add id x y 64 (* 4 6))))))
+
+(world:add {:id :left-border} 0 0 1 screen-height)
+(world:add {:id :right-border} screen-width 0 1 screen-height)
+
+(tick.delay (fn []
+              (set Block.down.fire true)) Block.down.interval)
+
+(fn Block.update [dt]
+  (tick.update dt)
+  (when Block.down.fire
+    (set Block.down.fire false)
+    (tick.delay (fn []
+                  (set Block.down.fire true))
+                Block.down.interval)
+    (+= Block.offset Block.down.dis)
+    (+= Char.y Block.down.dis)
+    (world:update Char Char.x Char.y)
+    (Block.batch:clear)
+    (each [i row (ipairs map)]
+      (each [j block (ipairs row)]
+        (when (not= 0 block)
+          (let [x (* 16 4 (- j 1))
+                y (* 6 4 (- i 1))
+                y-down (% (+ y Block.offset) screen-height)
+                id (. Block.indices (.. i "-" j))]
+            (Block.batch:add (. Block.tiles block) x y-down 0 4 4)
+            (world:update id x y-down)))))))
 
 ; }}}
 
@@ -270,9 +331,12 @@
   (love.graphics.setFont font))
 
 (fn love.update [dt]
-  (state.update dt))
+  (Block.update dt)
+  (Char.update dt))
 
 (fn love.draw []
+  (love.graphics.draw Block.batch)
+  (love.graphics.rectangle :fill 639 0 4 660)
   (state.draw))
 
 (fn love.keypressed [key]
