@@ -1,7 +1,6 @@
 ; {{{ Global
 (local lume (require :lib.lume))
 (local tick (require :lib.tick))
-(local fun (require :lib.fun))
 (local anim8 (require :lib.anim8))
 (local bump (require :lib.bump))
 
@@ -67,29 +66,6 @@
 
 ; }}}
 
-; {{{ Intro
-(local Intro (let [x (* 0.1 screen-width)]
-               {: x
-                :y screen-height
-                :y-stop (* 0.4 screen-height)
-                :w (- screen-width x)
-                :text (.. "The world is falling.\n" "You need to JUMP to survive.
-" "However, in order to jump,
-"
-                          "you need to CALCULATE first.")
-                :speed 50}))
-
-(fn Intro.update [dt]
-  (when (< Intro.y-stop Intro.y)
-    (let [dist (* Intro.speed dt)
-          newY (- Intro.y dist)]
-      (set Intro.y newY))))
-
-(fn Intro.draw []
-  (love.graphics.printf Intro.text Intro.x Intro.y Intro.w))
-
-; }}}
-
 ; {{{ Queue
 (local Queue {})
 
@@ -117,7 +93,6 @@
 ; }}}
 
 ; {{{ Status
-
 (local Status {:jumps 3
                :score 0
                :start false
@@ -232,12 +207,12 @@
   (< Char.v.x 0))
 
 (fn Char.update-vx [dt]
-  (if (love.keyboard.isDown :right)
+  (if (love.keyboard.isDown :right :d)
       (let [acc (if (Char.facing-left) Char.decel Char.accel)
             vx (axpy Char.v.x dt acc)
             vx-capped (math.min Char.v.x-lim vx)]
         (set Char.v.x vx-capped))
-      (love.keyboard.isDown :left)
+      (love.keyboard.isDown :left :a)
       (let [acc (if (Char.facing-left) Char.accel Char.decel)
             vx (axpy Char.v.x (- dt) acc)
             vx-capped (math.max (- Char.v.x-lim) vx)]
@@ -248,7 +223,7 @@
 
 (fn Char.update-vy [dt]
   (when (and (< Char.jump.passed Char.jump.passed-lim)
-             (love.keyboard.isDown :up))
+             (love.keyboard.isDown :up :w :space))
     (set Char.v.y Char.v.jump))
   (+= Char.v.y (* dt Char.gravity)))
 
@@ -304,7 +279,7 @@
 
 (fn Char.keypressed [key]
   (when (and (< 0 Status.jumps) (< Char.jump.coyote Char.jump.coyote-lim)
-             (= key :up))
+             (or (= key :up) (= key :w) (= key :space)))
     (+= Status.jumps -1)
     (sound.jump:play)
     (set Char.v.y Char.v.jump)
@@ -392,9 +367,10 @@
         (Block.draw)
         (Calc.draw)
         (Char.draw))
-      (love.graphics.printf (.. :Congratulation! "\n\n\n" "Your score is: "
-                                Status.score "!" "\n\n\n"
-                                "Press R to restart, or ESC to quit!")
+      (love.graphics.printf (.. :Congratulation! "\n\n\n" "You survived "
+                                Status.score " seconds!" "\n\n\n\n\n" "Press R to restart.
+"
+                                "Press ESC to quit.")
                             (* 64 2) (* 64 3) (- screen-width (* 64 4)))))
 
 (fn love.keypressed [key]
