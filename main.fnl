@@ -5,6 +5,16 @@
 (local anim8 (require :lib.anim8))
 (local bump (require :lib.bump))
 
+(local sound {:jump (love.audio.newSource :assets/Jump__001.wav :static)
+              :land (love.audio.newSource "assets/Bass Drum__001.wav" :static)
+              :walk (love.audio.newSource :assets/Footstep1__001.wav :static)
+              :correct (love.audio.newSource :assets/Pickup__002.wav :static)
+              :wrong (love.audio.newSource :assets/Explosion1__001.wav :static)
+              :game-over (love.audio.newSource :assets/Teleport2__005.wav
+                                               :static)
+              :bgm (love.audio.newSource "assets/Juhani Junkala [Retro Game Music Pack] Ending.wav"
+                                         :stream)})
+
 (local font (love.graphics.newFont :assets/PublicPixel.woff 30))
 (local screen-width (love.graphics.getWidth))
 (local screen-height (love.graphics.getHeight))
@@ -182,6 +192,7 @@
       (when (not= num nil)
         (set Calc.correct (= num prev-n.a))
         (+= Status.jumps (if Calc.correct 1 -1))
+        (: (if Calc.correct sound.correct sound.wrong) :play)
         (set Calc.reveal-content (.. prev-n.q " = " num))
         (when Calc.reveal
           (Calc.reveal-clearer:stop))
@@ -260,6 +271,7 @@
       (set Status.end true))
     (set Char.x actual-x)
     (set Char.y actual-y)
+    (set Char.on-ground-prev Char.on-ground)
     (set Char.on-ground false)
     (for [i 1 len]
       (let [normal (. cols i :normal)]
@@ -280,7 +292,12 @@
   (Char.update-vx dt)
   (Char.update-vy dt)
   (Char.update-ani)
-  (Char.move dt))
+  (Char.move dt)
+  (when Char.on-ground
+    (when (not= 0 Char.v.x)
+      (sound.walk:play))
+    (when (not Char.on-ground-prev)
+      (sound.land:play))))
 
 (fn Char.draw []
   (Char.ani.now:draw tile-map Char.x Char.y 0 4 4))
@@ -289,6 +306,7 @@
   (when (and (< 0 Status.jumps) (< Char.jump.coyote Char.jump.coyote-lim)
              (= key :up))
     (+= Status.jumps -1)
+    (sound.jump:play)
     (set Char.v.y Char.v.jump)
     (set Char.on-ground false)
     (set Char.jump.passed 0)))
@@ -356,22 +374,28 @@
   (love.graphics.setFont font))
 
 (fn love.update [dt]
-  (Status.update)
-  (tick.update dt)
-  (Block.update dt)
-  (Char.update dt))
+  (when (= 0 Status.score)
+    (tick.update dt)
+    (Block.update dt)
+    (Char.update dt)
+    (when (not (sound.bgm:isPlaying))
+      (sound.bgm:play))
+    (Status.update)
+    (when (not= 0 Status.score)
+      (sound.bgm:stop)
+      (sound.game-over:play))))
 
 (fn love.draw []
-  (if Status.end
-      (love.graphics.printf (.. :Congratulation! "\n\n\n" "Your score is: "
-                                Status.score "!" "\n\n\n"
-                                "Press R to restart, or ESC to quit!")
-                            (* 64 2) (* 64 3) (- screen-width (* 64 4)))
+  (if (= 0 Status.score)
       (do
         (Status.draw)
         (Block.draw)
         (Calc.draw)
-        (Char.draw))))
+        (Char.draw))
+      (love.graphics.printf (.. :Congratulation! "\n\n\n" "Your score is: "
+                                Status.score "!" "\n\n\n"
+                                "Press R to restart, or ESC to quit!")
+                            (* 64 2) (* 64 3) (- screen-width (* 64 4)))))
 
 (fn love.keypressed [key]
   (if (= key :escape) (love.event.quit)
