@@ -42,5 +42,7 @@ Files in the assets and lib folder are not my creation, see the following table 
 | [Fennel](https://github.com/bakpakin/Fennel) | MIT | Calvin Rose and contributors |
 | [Anim8](https://github.com/kikito/anim8) | MIT | Enrique García Cota |
 | [bump.lua](https://github.com/kikito/bump.lua) | MIT | Enrique García Cota |
+| [Lume](https://github.com/rxi/lume) | MIT | rxi |
+| [tick](https://github.com/rxi/tick) | MIT | rxi |
 
 The gaming mechanism is inspired by _NS-Shaft_ and _Dr Kawashima's Devilish Brain Training_.
